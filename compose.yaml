@@ -32,7 +32,7 @@ services:
       MAX_TOOL_CALLS: ${MAX_TOOL_CALLS:-3}
       MAX_OUTPUT_TOKENS: ${MAX_OUTPUT_TOKENS:-6000}
     ports:
-      - 127.0.0.1:8000:8000
+      - "127.0.0.1:${NEXUS_API_PORT:-18473}:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,7 +50,7 @@ services:
       N8N_HOST: localhost
       N8N_PORT: 5678
       N8N_PROTOCOL: http
-      N8N_EDITOR_BASE_URL: http://localhost:5678
+      N8N_EDITOR_BASE_URL: http://localhost:${NEXUS_N8N_PORT:-18474}
       N8N_SECURE_COOKIE: "false"
       N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
       N8N_DIAGNOSTICS_ENABLED: "false"
@@ -64,7 +64,7 @@ services:
       EXECUTIONS_TIMEOUT: 600
       EXECUTIONS_TIMEOUT_MAX: 600
     ports:
-      - 127.0.0.1:5678:5678
+      - "127.0.0.1:${NEXUS_N8N_PORT:-18474}:5678"
     volumes:
       - n8n_data:/home/node/.n8n
       - ./n8n:/workflows:ro

@@ -24,17 +24,23 @@ OPENAI_API_KEY=your-own-key
 
 Keep the generated PostgreSQL URL/password and other secrets. Set model IDs to models your OpenAI project can use. Defaults are `gpt-5-mini` for research/librarian and `text-embedding-3-small` for retrieval (1536 dimensions). Changing the embedding model after saving notes requires a re-embedding migration; do not simply mix different models in one library.
 
-Allow inbound HTTPS (443) and HTTP (80) for certificate issuance. Keep SSH available to you. The database has no public port. The API and n8n host ports bind only to loopback.
+Your existing Caddy handles public HTTPS and certificates. The database has no public port. Nexus binds to `127.0.0.1:18473` and n8n to `127.0.0.1:18474`. These high ports reduce the chance of colliding with other apps; they are not a security boundary. Loopback binding keeps them private. Override them with `NEXUS_API_PORT` and `NEXUS_N8N_PORT` in `.env` if needed. Existing `.env` files use these defaults without editing or regenerating secrets.
 
 ## 3. Start the services
 
 ```bash
-docker compose --profile public up -d --build
+docker compose up -d --build postgres api n8n
 docker compose ps
-curl --fail https://research.your-domain.example/healthz
+curl --fail http://127.0.0.1:18473/healthz
 ```
 
-Expect `{"status":"ok"}`. Caddy issues HTTPS certificates for the configured domain. If you already run a reverse proxy on ports 80/443, omit the `public` profile and adapt that proxy instead: proxy to `127.0.0.1:8000`, preserve streaming HTTP, allow at least 600 seconds, and deny `/internal` and `/internal/*` publicly. Do not expose n8n through the research domain.
+Expect `{"status":"ok"}`. This command starts only PostgreSQL, Nexus and n8n. It leaves the optional bundled Caddy service stopped.
+
+For Caddy running directly on the VPS (or with host networking), add the site block from `deploy/existing-Caddyfile.example` to your existing configuration. Replace the example hostname with your `DOMAIN` and use the configured API host port. It proxies to `127.0.0.1:18473` and denies `/internal` and `/internal/*`. Validate your full Caddy configuration before reloading the existing service. Preserve streaming HTTP and allow at least 600 seconds if your existing proxy has request timeouts. Then check `https://your-research-domain/healthz`.
+
+If your existing Caddy is a container on a bridge network, its `127.0.0.1` refers to that container. Connect Caddy and the Nexus API to a shared Docker network and use the API container's internal port `8000` through a unique network alias instead; the host-loopback example does not apply to that layout. Do not expose n8n through the research domain.
+
+For a fresh VPS with no existing reverse proxy, the bundled Caddy remains available with `docker compose --profile public up -d --build`. Use that only when ports 80/443 are available and point the domain at the VPS. The existing-Caddy deployment above does not use that profile.
 
 The n8n image is fixed at `2.39.6`, the stable release observed when this version was built. Other base images follow their specified major release tracks. For a reproducible production rollout, resolve and pin image digests after testing updates on your VPS. Python dependencies are hash-locked in `requirements.lock`.
 
@@ -43,10 +49,10 @@ The n8n image is fixed at `2.39.6`, the stable release observed when this versio
 From your own computer, open an SSH tunnel:
 
 ```bash
-ssh -L 5678:127.0.0.1:5678 your-user@your-vps
+ssh -L 18474:127.0.0.1:18474 your-user@your-vps
 ```
 
-Open `http://localhost:5678` in your browser and create the n8n owner account. Its password is separate from the Research Nexus owner password.
+Open `http://localhost:18474` in your browser and create the n8n owner account. Its password is separate from the Research Nexus owner password. If you changed `NEXUS_N8N_PORT`, use that port on both sides of the SSH tunnel and in the browser URL.
 
 Import `n8n/research-workflow.json` using n8n's workflow import option.
 

@@ -1,0 +1,16 @@
+# Add this site block to an existing Caddy running on the VPS host.
+# Replace the hostname and match the upstream port to NEXUS_API_PORT.
+# For bridge-networked container Caddy, see docs/setup.md instead.
+research.your-domain.example {
+    @internal path /internal /internal/*
+    respond @internal 404
+    request_body {
+        max_size 1MB
+    }
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+    }
+    reverse_proxy 127.0.0.1:18473
+}
