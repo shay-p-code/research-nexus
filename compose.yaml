@@ -1,0 +1,98 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: nexus
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Generate .env first}
+    volumes:
+      - research_db:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U nexus -d nexus']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Generate .env first}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8000}
+      API_TOKEN: ${API_TOKEN:?Generate .env first}
+      WORKER_TOKEN: ${WORKER_TOKEN:?Generate .env first}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:?Generate .env first}
+      OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID:-research-nexus-chatgpt}
+      OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET:?Generate .env first}
+      OAUTH_REDIRECT_URIS: '${OAUTH_REDIRECT_URIS:-["https://chatgpt.com/connector_platform_oauth_redirect"]}'
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      RESEARCH_MODEL: ${RESEARCH_MODEL:-gpt-5-mini}
+      LIBRARIAN_MODEL: ${LIBRARIAN_MODEL:-gpt-5-mini}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      MAX_TOOL_CALLS: ${MAX_TOOL_CALLS:-3}
+      MAX_OUTPUT_TOKENS: ${MAX_OUTPUT_TOKENS:-6000}
+    ports:
+      - 127.0.0.1:8000:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  n8n:
+    image: ${N8N_IMAGE:-docker.n8n.io/n8nio/n8n:2.39.6}
+    environment:
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?Generate .env first}
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      N8N_EDITOR_BASE_URL: http://localhost:5678
+      N8N_SECURE_COOKIE: "false"
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_TEMPLATES_ENABLED: "false"
+      GENERIC_TIMEZONE: UTC
+      TZ: UTC
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: none
+      EXECUTIONS_DATA_SAVE_ON_ERROR: none
+      EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: "false"
+      EXECUTIONS_TIMEOUT: 600
+      EXECUTIONS_TIMEOUT_MAX: 600
+    ports:
+      - 127.0.0.1:5678:5678
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n:/workflows:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: [public]
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN for public HTTPS}
+    ports:
+      - 80:80
+      - 443:443
+      - 443:443/udp
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  research_db:
+  n8n_data:
+  caddy_data:
+  caddy_config:
